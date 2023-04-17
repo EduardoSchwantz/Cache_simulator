@@ -9,30 +9,29 @@
 typedef struct
 {
     uint32_t tag, value;
-    bool valid;
+    bool valid; // conteudo de cada indice
     int countLru;
 } CacheLine;
 
 typedef struct
 {
     CacheLine *block;
-} CacheSet;
+} CacheSet; // block == associatividade
 
 typedef struct
 {
-    int countAcess; // contador para o lru
+    int countAcess; // contador para o universal para lru
     int countFifo;
     char *subst;
     int nsets;
     int bsize;
     int assoc;
     int block_count;
-    CacheSet *sets;
+    CacheSet *sets; // indices
 } Cache;
 
-uint32_t
-ReverseBytes(uint32_t bytes); // função retirada da internet para reverter os
-                              // bits, assim ficando no formato 0x12345678
+uint32_t ReverseBytes(uint32_t bytes); // função retirada da internet para reverter os
+                                       // bits, assim ficando no formato 0x12345678
 int tam_arquivo(char *arquivoEntrada);
 void ler_Arquivo(char *arquivoEntrada, int numadreesss, uint32_t *adreess);
 Cache *createCache(int nsets, int bsize, int assoc, char *subst);
@@ -59,16 +58,15 @@ int main(int argc, char *argv[])
     char *subst = argv[4];
     int flagOut = atoi(argv[5]);
     char *arquivoEntrada = argv[6];
-    int numadreesss = tam_arquivo(arquivoEntrada); // vefirica o tamanho
-    uint32_t *adreess =
-        malloc(numadreesss * sizeof(uint32_t)); // aloca espaço para os endereços
+    int numadreesss = tam_arquivo(arquivoEntrada);              // vefirica o tamanho o arquivo (quantidade de endereços)
+    uint32_t *adreess = malloc(numadreesss * sizeof(uint32_t)); // aloca espaço para os endereços
 
     ler_Arquivo(arquivoEntrada, numadreesss, adreess);
+
     for (int i = 0; i < numadreesss; i++)
     {
-        adreess[i] =
-            ReverseBytes(adreess[i]); // inverte o endereço, passando os bits mais
-                                      // significativos a esquerda.
+        adreess[i] = ReverseBytes(adreess[i]); // inverte o endereço, passando os bits mais
+                                               // significativos a direita.
     }
 
     Cache *cache = createCache(nsets, bsize, assoc, subst);
@@ -129,8 +127,8 @@ int tam_arquivo(char *arquivoEntrada)
         printf("Erro ao abrir arquivo de entrada.\n");
         exit(EXIT_FAILURE);
     }
-    fseek(inputFile, 0, SEEK_END);
-    int tam = ftell(inputFile);
+    fseek(inputFile, 0, SEEK_END);          //bota o poteiro na primeira posição do arquivo
+    int tam = ftell(inputFile);             //retorna o tamanho do arquivo em  32 bits
     tam = tam / 4;
     fclose(inputFile);
     return tam;
@@ -145,8 +143,8 @@ void ler_Arquivo(char *arquivoEntrada, int numadreesss, uint32_t *adreess)
         printf("Erro ao abrir o arquivo.\n");
         exit(EXIT_FAILURE);
     }
-    int bytesRead = fread(adreess, sizeof(uint32_t), numadreesss, fp);
-    if (bytesRead != numadreesss)
+    int bytesRead = fread(adreess, sizeof(uint32_t), numadreesss, fp);  //retorna a quantidade de bytes lidos, armazena os dados na primeira
+    if (bytesRead != numadreesss)                                       //variavel passada como parametro
     {
         printf("Erro ao ler o arquivo.\n");
         exit(EXIT_FAILURE);
@@ -169,7 +167,7 @@ Cache *createCache(int nsets, int bsize, int assoc, char *subst)
 
     for (int i = 0; i < nsets; i++)
     {
-        cache->sets[i].block = malloc(assoc * sizeof(CacheLine));
+        cache->sets[i].block = malloc(assoc * sizeof(CacheLine));           // imaginar como uma matriz
         for (int j = 0; j < assoc; j++)
         {
             cache->sets[i].block[j].value = -1;
@@ -217,7 +215,7 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
         {
             if (!cache->sets[index].block[i].valid) // encontra algum bloco vazio
             {
-                empty_block = i;
+                empty_block = i;                // posição bloco vázio
                 break;
             }
         }
@@ -238,7 +236,7 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
             return;
         }
 
-        else
+        else                        // se não encontrou bloco vázio
         {
             if (strcmp(cache->subst, "r") == 0 ||
                 strcmp(cache->subst, "R") == 0)
@@ -275,12 +273,12 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
                     }
 
                 } // obtemos o contador menor.
-               
+
                 for (int i = 0; i < cache->assoc; i++)
                 {
                     if (menor == cache->sets[index].block[i].countLru)
-                    {                                                   // encontra o bloco que bate os valores.
-                        block_to_replace = i; 
+                    { // encontra o bloco que bate os valores.
+                        block_to_replace = i;
                     }
                 }
             }
@@ -295,7 +293,7 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
                                                                      // politica
             cache->sets[index].block[block_to_replace].value = end;
             cache->sets[index].block[block_to_replace].countLru = cache->countAcess; // apos aplicar a politica, atualiza o valor novo
-                                                                                // do contado para a politica lru.
+                                                                                     // do contado para a politica lru.
         }
 
         if (cache->block_count == cache->nsets * cache->assoc)
