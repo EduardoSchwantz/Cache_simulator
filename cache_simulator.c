@@ -11,6 +11,7 @@ typedef struct
     uint32_t tag, value;
     bool valid; // conteudo de cada indice
     int countLru;
+    int countFifo;
 } CacheLine;
 
 typedef struct
@@ -20,8 +21,7 @@ typedef struct
 
 typedef struct
 {
-    int countAcess; // contador para o universal para lru
-    int countFifo;
+    int countAcess; // contador para o universal para lru e fifo
     char *subst;
     int nsets;
     int bsize;
@@ -127,8 +127,8 @@ int tam_arquivo(char *arquivoEntrada)
         printf("Erro ao abrir arquivo de entrada.\n");
         exit(EXIT_FAILURE);
     }
-    fseek(inputFile, 0, SEEK_END);          //bota o poteiro na primeira posição do arquivo
-    int tam = ftell(inputFile);             //retorna o tamanho do arquivo em  32 bits
+    fseek(inputFile, 0, SEEK_END); // bota o poteiro na primeira posição do arquivo
+    int tam = ftell(inputFile);    // retorna o tamanho do arquivo em  32 bits
     tam = tam / 4;
     fclose(inputFile);
     return tam;
@@ -143,8 +143,8 @@ void ler_Arquivo(char *arquivoEntrada, int numadreesss, uint32_t *adreess)
         printf("Erro ao abrir o arquivo.\n");
         exit(EXIT_FAILURE);
     }
-    int bytesRead = fread(adreess, sizeof(uint32_t), numadreesss, fp);  //retorna a quantidade de bytes lidos, armazena os dados na primeira
-    if (bytesRead != numadreesss)                                       //variavel passada como parametro
+    int bytesRead = fread(adreess, sizeof(uint32_t), numadreesss, fp); // retorna a quantidade de bytes lidos, armazena os dados na primeira
+    if (bytesRead != numadreesss)                                      // variavel passada como parametro
     {
         printf("Erro ao ler o arquivo.\n");
         exit(EXIT_FAILURE);
@@ -160,19 +160,19 @@ Cache *createCache(int nsets, int bsize, int assoc, char *subst)
     cache->assoc = assoc;
     cache->subst = subst;
     cache->block_count = 0;
-    cache->countFifo = 0;
     cache->countAcess = 0;
 
     cache->sets = malloc(nsets * sizeof(CacheSet));
 
     for (int i = 0; i < nsets; i++)
     {
-        cache->sets[i].block = malloc(assoc * sizeof(CacheLine));           // imaginar como uma matriz
+        cache->sets[i].block = malloc(assoc * sizeof(CacheLine)); // imaginar como uma matriz
         for (int j = 0; j < assoc; j++)
         {
             cache->sets[i].block[j].value = -1;
             cache->sets[i].block[j].valid = false;
             cache->sets[i].block[j].countLru = -1;
+            cache->sets[i].block[j].countFifo = -1;
         }
     }
 
@@ -200,8 +200,7 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
         {
             hit = true;
             (*hits)++;
-            cache->sets[index].block[i].countLru = cache->countAcess; // politica lru. se houve hit, atualiza o acesso do
-                                                                      // bloco.
+            cache->sets[index].block[i].countLru = cache->countAcess; // politica lru. se houve hit, atualiza o acesso do bloco.
             break;
         }
     }
@@ -215,7 +214,7 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
         {
             if (!cache->sets[index].block[i].valid) // encontra algum bloco vazio
             {
-                empty_block = i;                // posição bloco vázio
+                empty_block = i; // posição bloco vázio
                 break;
             }
         }
@@ -231,12 +230,12 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
                                   // para identificar miss conflito ou capacidade,
                                   // caso não for miss compulssório
 
-            cache->sets[index].block[empty_block].countLru = cache->countAcess; // preenche o bloco com o valor de acesso novo para
-                                                                                // lru.
+            cache->sets[index].block[empty_block].countLru = cache->countAcess; // preenche o bloco com o valor de acesso novo para lru.
+            cache->sets[index].block[empty_block].countFifo = cache->countAcess; // preenche o bloco com o valor de acesso novo para fifo.
             return;
         }
 
-        else                        // se não encontrou bloco vázio
+        else // se não encontrou bloco vázio
         {
             if (strcmp(cache->subst, "r") == 0 ||
                 strcmp(cache->subst, "R") == 0)
@@ -247,18 +246,23 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
             else if (strcmp(cache->subst, "f") == 0 ||
                      strcmp(cache->subst, "F") == 0)
             {
-                if (cache->countFifo < (cache->assoc - 1))
+                int menor = cache->sets[index].block[0].countFifo;
+                for (int i = 1; i < cache->assoc; i++)
                 {
-                    cache->countFifo++; // para indentificar o bloco a ser substituido, se
-                                        // o contador for menor que a associatividade - 1
-                                        // ele soma o contador em um, e substiu nesse bloco
-                }
-                else
+                    if (cache->sets[index].block[i].countFifo < menor)
+                    {
+                        menor = cache->sets[index].block[i].countFifo;
+                    }
+
+                } // obtemos o contador menor.
+
+                for (int i = 0; i < cache->assoc; i++)
                 {
-                    cache->countFifo = 0; // se o contador for >= a associatividade - 1
-                                          // ele retorna pra 0 e substiui nesse.
+                    if (menor == cache->sets[index].block[i].countFifo)
+                    { // encontra o bloco que bate os valores.
+                        block_to_replace = i;
+                    }
                 }
-                block_to_replace = cache->countFifo;
             }
             else if (strcmp(cache->subst, "l") == 0 ||
                      strcmp(cache->subst, "L") == 0)
@@ -272,7 +276,7 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
                         menor = cache->sets[index].block[i].countLru;
                     }
 
-                } // obtemos o contador menor.
+                } // obtemos o contador menor. // semelhante ao fifo, porém o contador de lru é atualizado quando ocorre hit tambem.
 
                 for (int i = 0; i < cache->assoc; i++)
                 {
@@ -294,7 +298,8 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
             cache->sets[index].block[block_to_replace].value = end;
             cache->sets[index].block[block_to_replace].countLru = cache->countAcess; // apos aplicar a politica, atualiza o valor novo
                                                                                      // do contado para a politica lru.
-        }
+            cache->sets[index].block[block_to_replace].countFifo = cache->countAcess;// apos aplicar a politica atualiza o valor da nova
+        }                                                                            //posição do bloco que foi substituido
 
         if (cache->block_count == cache->nsets * cache->assoc)
         {
