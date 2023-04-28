@@ -16,8 +16,8 @@ typedef struct
 
 typedef struct
 {
-    CacheLine *block;
-} CacheSet; // block == associatividade
+    CacheLine *block; // block == associatividade
+} CacheSet;
 
 typedef struct
 {
@@ -35,6 +35,7 @@ uint32_t ReverseBytes(uint32_t bytes); // função retirada da internet para rev
 int tam_arquivo(char *arquivoEntrada);
 void ler_Arquivo(char *arquivoEntrada, int numadreesss, uint32_t *adreess);
 Cache *createCache(int nsets, int bsize, int assoc, char *subst);
+void print_binary(uint32_t address);
 void destroyCache(Cache *cache);
 void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
                   float *miss_compulsorio, float *miss_capacidade,
@@ -61,7 +62,7 @@ int main(int argc, char *argv[])
     int numadreesss = tam_arquivo(arquivoEntrada);              // vefirica o tamanho o arquivo (quantidade de endereços)
     uint32_t *adreess = malloc(numadreesss * sizeof(uint32_t)); // aloca espaço para os endereços
 
-    ler_Arquivo(arquivoEntrada, numadreesss, adreess);
+    ler_Arquivo(arquivoEntrada, numadreesss, adreess); // nome do arquivo, quantidade d endereço e endereço de onde vai ser arm cada num
 
     for (int i = 0; i < numadreesss; i++)
     {
@@ -78,11 +79,13 @@ int main(int argc, char *argv[])
     {
         access_cache(cache, adreess[i], &hits, &misses, &miss_compulsorio,
                      &miss_capacidade, &miss_conflito);
+       // printf("\n");
+       // print_binary(adreess[i]);
     }
 
     if (flagOut == 1)
     {
-        printf("%d %.4f %.4f %.2f %.2f %.2f", numadreesss, hits / numadreesss,
+        printf("%d %.4f %.4f %.4f %.4f %.4f", numadreesss, hits / numadreesss,
                misses / numadreesss, miss_compulsorio / misses,
                miss_capacidade / misses, miss_conflito / misses);
     }
@@ -143,7 +146,8 @@ void ler_Arquivo(char *arquivoEntrada, int numadreesss, uint32_t *adreess)
         printf("Erro ao abrir o arquivo.\n");
         exit(EXIT_FAILURE);
     }
-    int bytesRead = fread(adreess, sizeof(uint32_t), numadreesss, fp); // retorna a quantidade de bytes lidos, armazena os dados na primeira
+    int bytesRead = fread(adreess, sizeof(uint32_t), numadreesss, fp); // retorna a quantidade de bytes lidos,
+                                                                       // armazena os dados na primeira
     if (bytesRead != numadreesss)                                      // variavel passada como parametro
     {
         printf("Erro ao ler o arquivo.\n");
@@ -186,10 +190,8 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
     int bitsOffset = (int)log2(cache->bsize);
     int bitsIndex = (int)log2(cache->nsets);
     uint32_t tag, index;
-
     tag = end >> (bitsOffset + bitsIndex);
-    index = (end >> bitsOffset) % cache->nsets;
-
+    index = (end >> bitsOffset) % cache->nsets;    
     cache->countAcess++; // contador de acessos para politica lru.
 
     bool hit = false;
@@ -230,7 +232,7 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
                                   // para identificar miss conflito ou capacidade,
                                   // caso não for miss compulssório
 
-            cache->sets[index].block[empty_block].countLru = cache->countAcess; // preenche o bloco com o valor de acesso novo para lru.
+            cache->sets[index].block[empty_block].countLru = cache->countAcess;  // preenche o bloco com o valor de acesso novo para lru.
             cache->sets[index].block[empty_block].countFifo = cache->countAcess; // preenche o bloco com o valor de acesso novo para fifo.
             return;
         }
@@ -296,10 +298,10 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
             cache->sets[index].block[block_to_replace].valid = true; // atualiza os parametros de acordo com o bloco definido pela
                                                                      // politica
             cache->sets[index].block[block_to_replace].value = end;
-            cache->sets[index].block[block_to_replace].countLru = cache->countAcess; // apos aplicar a politica, atualiza o valor novo
-                                                                                     // do contado para a politica lru.
-            cache->sets[index].block[block_to_replace].countFifo = cache->countAcess;// apos aplicar a politica atualiza o valor da nova
-        }                                                                            //posição do bloco que foi substituido
+            cache->sets[index].block[block_to_replace].countLru = cache->countAcess;  // apos aplicar a politica, atualiza o valor novo
+                                                                                      // do contado para a politica lru.
+            cache->sets[index].block[block_to_replace].countFifo = cache->countAcess; // apos aplicar a politica atualiza o valor da nova
+        }                                                                             // posição do bloco que foi substituido
 
         if (cache->block_count == cache->nsets * cache->assoc)
         {
@@ -381,4 +383,11 @@ void printFlagOut(Cache *cache, float *hits, float *misses,
            *miss_capacidade, (*miss_capacidade / *misses) * 100, *miss_conflito,
            (*miss_conflito / *misses) * 100);
     printf("============================================== \n");
+}
+void print_binary(uint32_t address)
+{
+    for (int i = 31; i >= 0; i--)
+    {
+        printf("%d", (address >> i) & 1);
+    }
 }
