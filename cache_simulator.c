@@ -9,33 +9,31 @@
 typedef struct
 {
     uint32_t tag, value;
-    bool valid; // conteudo de cada indice
+    bool valid;
     int countLru;
     int countFifo;
 } CacheLine;
 
 typedef struct
 {
-    CacheLine *block; // block == associatividade
+    CacheLine *block;
 } CacheSet;
 
 typedef struct
 {
-    int countAcess; // contador para o universal para lru e fifo
+    int countAcess;
     char *subst;
     int nsets;
     int bsize;
     int assoc;
     int block_count;
-    CacheSet *sets; // indices
+    CacheSet *sets;
 } Cache;
 
 uint32_t ReverseBytes(uint32_t bytes); // função retirada da internet para reverter os
                                        // bits, assim ficando no formato 0x12345678
-int tam_arquivo(char *arquivoEntrada);
-void ler_Arquivo(char *arquivoEntrada, int numadreesss, uint32_t *adreess);
 Cache *createCache(int nsets, int bsize, int assoc, char *subst);
-void print_binary(uint32_t address);
+void print_number(uint32_t address);
 void destroyCache(Cache *cache);
 void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
                   float *miss_compulsorio, float *miss_capacidade,
@@ -59,33 +57,34 @@ int main(int argc, char *argv[])
     char *subst = argv[4];
     int flagOut = atoi(argv[5]);
     char *arquivoEntrada = argv[6];
-    int numadreesss = tam_arquivo(arquivoEntrada);              // vefirica o tamanho o arquivo (quantidade de endereços)
-    uint32_t *adreess = malloc(numadreesss * sizeof(uint32_t)); // aloca espaço para os endereços
-
-    ler_Arquivo(arquivoEntrada, numadreesss, adreess); // nome do arquivo, quantidade d endereço e endereço de onde vai ser arm cada num
-
-    for (int i = 0; i < numadreesss; i++)
-    {
-        adreess[i] = ReverseBytes(adreess[i]); // inverte o endereço, passando os bits mais
-                                               // significativos a direita.
-    }
-
     Cache *cache = createCache(nsets, bsize, assoc, subst);
     float hits = 0, misses = 0, miss_compulsorio = 0, miss_capacidade = 0,
           miss_conflito = 0;
 
-    // Simulação de acesso à cache
-    for (int i = 0; i < numadreesss; i++)
+    FILE *fp = fopen(arquivoEntrada, "rb");
+    if (fp == NULL)
     {
-        access_cache(cache, adreess[i], &hits, &misses, &miss_compulsorio,
-                     &miss_capacidade, &miss_conflito);
-       // printf("\n");
-       // print_binary(adreess[i]);
+        printf("Erro ao abrir o arquivo.\n");
+        exit(EXIT_FAILURE);
     }
+
+    uint32_t end;
+    int numadreesss = 0;
+    while (fread(&end, sizeof(uint32_t), 1, fp) == 1)
+    {
+        numadreesss++;
+        end = ReverseBytes(end);
+        //printf("\n");
+        //print_number(end); 
+        access_cache(cache, end, &hits, &misses, &miss_compulsorio,
+                     &miss_capacidade, &miss_conflito);
+    }
+
+    fclose(fp);
 
     if (flagOut == 1)
     {
-        printf("%d %.4f %.4f %.4f %.4f %.4f", numadreesss, hits / numadreesss,
+        printf("\n%d %.4f %.4f %.2f %.2f %.2f", numadreesss, hits / numadreesss,
                misses / numadreesss, miss_compulsorio / misses,
                miss_capacidade / misses, miss_conflito / misses);
     }
@@ -97,7 +96,6 @@ int main(int argc, char *argv[])
 
     destroyCache(cache);
 
-    free(adreess);
     return 0;
 }
 
@@ -121,39 +119,6 @@ uint32_t ReverseBytes(uint32_t bytes)
     }
 
     return (aux);
-}
-int tam_arquivo(char *arquivoEntrada)
-{
-    FILE *inputFile = fopen(arquivoEntrada, "rb");
-    if (inputFile == NULL)
-    {
-        printf("Erro ao abrir arquivo de entrada.\n");
-        exit(EXIT_FAILURE);
-    }
-    fseek(inputFile, 0, SEEK_END); // bota o poteiro na primeira posição do arquivo
-    int tam = ftell(inputFile);    // retorna o tamanho do arquivo em  32 bits
-    tam = tam / 4;
-    fclose(inputFile);
-    return tam;
-}
-
-void ler_Arquivo(char *arquivoEntrada, int numadreesss, uint32_t *adreess)
-{
-    FILE *fp;
-    fp = fopen(arquivoEntrada, "rb");
-    if (fp == NULL)
-    {
-        printf("Erro ao abrir o arquivo.\n");
-        exit(EXIT_FAILURE);
-    }
-    int bytesRead = fread(adreess, sizeof(uint32_t), numadreesss, fp); // retorna a quantidade de bytes lidos,
-                                                                       // armazena os dados na primeira
-    if (bytesRead != numadreesss)                                      // variavel passada como parametro
-    {
-        printf("Erro ao ler o arquivo.\n");
-        exit(EXIT_FAILURE);
-    }
-    fclose(fp);
 }
 
 Cache *createCache(int nsets, int bsize, int assoc, char *subst)
@@ -191,7 +156,7 @@ void access_cache(Cache *cache, uint32_t end, float *hits, float *misses,
     int bitsIndex = (int)log2(cache->nsets);
     uint32_t tag, index;
     tag = end >> (bitsOffset + bitsIndex);
-    index = (end >> bitsOffset) % cache->nsets;    
+    index = (end >> bitsOffset) % cache->nsets;
     cache->countAcess++; // contador de acessos para politica lru.
 
     bool hit = false;
@@ -384,10 +349,11 @@ void printFlagOut(Cache *cache, float *hits, float *misses,
            (*miss_conflito / *misses) * 100);
     printf("============================================== \n");
 }
-void print_binary(uint32_t address)
+void print_number(uint32_t address)
 {
     for (int i = 31; i >= 0; i--)
     {
         printf("%d", (address >> i) & 1);
     }
+    printf("\n%u\n", address);
 }
